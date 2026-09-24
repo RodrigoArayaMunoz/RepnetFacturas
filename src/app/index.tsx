@@ -1,4 +1,5 @@
 import { SymbolView } from 'expo-symbols';
+import { router } from 'expo-router';
 import type { ComponentProps } from 'react';
 import {
   Image,
@@ -68,8 +69,8 @@ export default function HomeScreen() {
       <Image
         accessibilityIgnoresInvertColors
         resizeMode="contain"
-        source={require('@/assets/images/invoice-truck.png')}
-        style={styles.truck}
+        source={require('@/assets/images/invoice-document.png')}
+        style={styles.documentArtwork}
       />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'right', 'bottom', 'left']}>
@@ -108,7 +109,7 @@ export default function HomeScreen() {
               accessibilityHint="Abre la cámara para capturar una factura"
               accessibilityLabel="Tomar foto"
               accessibilityRole="button"
-              onPress={() => {}}
+              onPress={() => router.push('/camera')}
               style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
               <SymbolView
                 name={{ ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' }}
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  truck: {
+  documentArtwork: {
     position: 'absolute',
     top: -15,
     right: -105,
@@ -159,22 +160,22 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   intro: {
-    marginTop: 17,
+    marginTop: 27,
   },
   heading: {
     color: '#111827',
-    fontSize: 30,
+    fontSize: 50,
     fontWeight: '800',
-    lineHeight: 30,
-    letterSpacing: -0.7,
+    lineHeight: 52,
+    letterSpacing: -0.5,
   },
   headingAccent: {
     color: BRAND_BLUE,
   },
   description: {
-    marginTop: 12,
+    marginTop: 18,
     color: '#596170',
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 18,
   },
   spacer: {
@@ -189,6 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     boxShadow: '0 7px 18px rgba(75, 120, 168, 0.12)',
     elevation: 5,
+    marginBottom: 50,
   },
   benefitRow: {
     minHeight: 54,
