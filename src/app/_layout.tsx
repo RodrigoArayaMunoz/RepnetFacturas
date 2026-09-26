@@ -11,6 +11,18 @@ export default function RootLayout() {
           name="camera"
           options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }}
         />
+        <Stack.Screen
+          name="processing"
+          options={{ animation: 'slide_from_right', gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="invoice-result"
+          options={{ animation: 'slide_from_right', gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="email-preview"
+          options={{ animation: 'slide_from_right', gestureEnabled: false }}
+        />
       </Stack>
     </>
   );

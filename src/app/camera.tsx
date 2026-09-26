@@ -89,6 +89,14 @@ export default function CameraScreen() {
     setCameraError(null);
   };
 
+  const usePicture = () => {
+    if (!capturedUri) {
+      return;
+    }
+
+    router.replace('/processing');
+  };
+
   const toggleCameraFacing = () => {
     setFlashEnabled(false);
     setIsCameraReady(false);
@@ -210,8 +218,9 @@ export default function CameraScreen() {
               <Text style={styles.secondaryButtonText}>Repetir</Text>
             </Pressable>
             <Pressable
+              accessibilityLabel="Usar foto y procesar factura"
               accessibilityRole="button"
-              onPress={closeCamera}
+              onPress={usePicture}
               style={({ pressed }) => [styles.confirmButton, pressed && styles.pressed]}>
               <SymbolView
                 name={{ ios: 'checkmark', android: 'check', web: 'check' }}
