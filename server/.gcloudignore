@@ -1,0 +1,12 @@
+# Upload only the files needed to build the backend. Never upload local secrets.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
