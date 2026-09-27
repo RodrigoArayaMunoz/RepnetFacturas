@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,9 +14,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useInvoiceProcessing } from '@/context/invoice-processing-context';
+
 const BRAND_BLUE = '#087BFF';
 const SUCCESS_GREEN = '#10A56A';
-const PROCESSING_DURATION = 5000;
+const MIN_PROCESSING_DURATION = 5000;
 const RING_SIZE = 190;
 const RING_STROKE = 12;
 const RING_SEGMENTS = 96;
@@ -43,9 +46,9 @@ const processingSteps: ProcessingStep[] = [
     completedDescription: 'Productos identificados',
   },
   {
-    title: 'Validando montos',
-    processingDescription: 'Verificando totales...',
-    completedDescription: 'Montos validados',
+    title: 'Validando datos',
+    processingDescription: 'Revisando el resultado...',
+    completedDescription: 'Datos validados',
   },
 ];
 
@@ -163,8 +166,11 @@ function StepRow({
 }
 
 export default function ProcessingScreen() {
+  const { errorMessage, processInvoice, resetInvoice } = useInvoiceProcessing();
   const [progress, setProgress] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const [entranceOpacity] = useState(() => new Animated.Value(0));
   const [entranceTranslateY] = useState(() => new Animated.Value(18));
   const [successScale] = useState(() => new Animated.Value(0.92));
@@ -185,13 +191,42 @@ export default function ProcessingScreen() {
       }),
     ]).start();
 
-    const startedAt = Date.now();
-    const interval = setInterval(() => {
-      const nextProgress = Math.min((Date.now() - startedAt) / PROCESSING_DURATION, 1);
-      setProgress(nextProgress);
+  }, [entranceOpacity, entranceTranslateY]);
 
-      if (nextProgress >= 1) {
-        clearInterval(interval);
+  useEffect(() => {
+    let isMounted = true;
+    const startedAt = Date.now();
+
+    const interval = setInterval(() => {
+      setProgress((currentProgress) => {
+        const increment = currentProgress < 0.28
+          ? 0.02
+          : currentProgress < 0.65
+            ? 0.012
+            : 0.004;
+
+        return Math.min(currentProgress + increment, 0.92);
+      });
+    }, 100);
+
+    const runProcessing = async () => {
+      try {
+        await processInvoice();
+
+        const remainingTime = Math.max(
+          MIN_PROCESSING_DURATION - (Date.now() - startedAt),
+          0,
+        );
+
+        if (remainingTime > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remainingTime));
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProgress(1);
         setIsComplete(true);
         Animated.spring(successScale, {
           damping: 10,
@@ -200,11 +235,24 @@ export default function ProcessingScreen() {
           toValue: 1,
           useNativeDriver: true,
         }).start();
-      }
-    }, 50);
+      } catch {
+        // El contexto conserva el mensaje que se muestra debajo del progreso.
+      } finally {
+        clearInterval(interval);
 
-    return () => clearInterval(interval);
-  }, [entranceOpacity, entranceTranslateY, successScale]);
+        if (isMounted) {
+          setIsProcessing(false);
+        }
+      }
+    };
+
+    void runProcessing();
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [attempt, processInvoice, successScale]);
 
   useEffect(() => {
     if (!isComplete) {
@@ -255,12 +303,18 @@ export default function ProcessingScreen() {
 
           <View style={styles.headingBlock}>
             <Text accessibilityLiveRegion="polite" style={styles.heading}>
-              {isComplete ? 'Factura Procesada' : 'Procesando\ntu factura'}
+              {isComplete
+                ? 'Factura Procesada'
+                : errorMessage && !isProcessing
+                  ? 'No pudimos\nprocesarla'
+                  : 'Procesando\ntu factura'}
             </Text>
             <Text style={styles.description}>
               {isComplete
                 ? 'La información de tu factura fue verificada correctamente.'
-                : 'Estamos extrayendo la información del documento. Esto puede tomar unos segundos.'}
+                : errorMessage && !isProcessing
+                  ? errorMessage
+                  : 'Estamos extrayendo la información del documento. Esto puede tomar unos segundos.'}
             </Text>
           </View>
 
@@ -292,6 +346,31 @@ export default function ProcessingScreen() {
                 <Text style={styles.successMessageText}>Factura Procesada</Text>
               </View>
             </Animated.View>
+          )}
+
+          {errorMessage && !isProcessing && !isComplete && (
+            <View accessibilityLiveRegion="assertive" style={styles.errorActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setProgress(0);
+                  setIsComplete(false);
+                  setIsProcessing(true);
+                  setAttempt((currentAttempt) => currentAttempt + 1);
+                }}
+                style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}>
+                <Text style={styles.retryButtonText}>Reintentar</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  resetInvoice();
+                  router.replace('/camera');
+                }}
+                style={({ pressed }) => [styles.retakeButton, pressed && styles.pressed]}>
+                <Text style={styles.retakeButtonText}>Tomar otra foto</Text>
+              </Pressable>
+            </View>
           )}
         </Animated.View>
       </ScrollView>
@@ -465,5 +544,39 @@ const styles = StyleSheet.create({
     color: '#08764C',
     fontSize: 15,
     fontWeight: '800',
+  },
+  errorActions: {
+    marginTop: 10,
+    gap: 10,
+  },
+  retryButton: {
+    minHeight: 50,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BRAND_BLUE,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  retakeButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#B8C5D4',
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  retakeButtonText: {
+    color: '#344054',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  pressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.99 }],
   },
 });

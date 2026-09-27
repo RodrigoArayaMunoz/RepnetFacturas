@@ -16,13 +16,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useInvoiceProcessing } from '@/context/invoice-processing-context';
+
 const BRAND_BLUE = '#087BFF';
 
 export default function EmailPreviewScreen() {
+  const { invoice, photoUri } = useInvoiceProcessing();
   const [opacity] = useState(() => new Animated.Value(0));
   const [translateY] = useState(() => new Animated.Value(16));
-  const [message, setMessage] = useState(
-    'Hola,\n\nAdjunto factura N.º 0012345 de Comercial Andes SpA.\n\nProductos detectados: 4\n\nQuedo atento,'
+  const supplierName = invoice?.supplierName ?? 'proveedor no detectado';
+  const invoiceNumber = invoice?.invoiceNumber ?? 'sin número';
+  const [message, setMessage] = useState(() =>
+    [
+      'Hola,',
+      '',
+      `Adjunto factura N.º ${invoiceNumber} de ${supplierName}.`,
+      '',
+      `Productos detectados: ${invoice?.products.length ?? 0}`,
+      '',
+      'Quedo atento,',
+    ].join('\n'),
   );
 
   useEffect(() => {
@@ -117,7 +130,9 @@ export default function EmailPreviewScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Asunto</Text>
             <View style={styles.singleLineField}>
-              <Text style={styles.fieldText}>Factura N.º 0012345 - Comercial Andes SpA</Text>
+              <Text style={styles.fieldText}>
+                Factura N.º {invoiceNumber} - {supplierName}
+              </Text>
             </View>
           </View>
 
@@ -143,14 +158,14 @@ export default function EmailPreviewScreen() {
                 accessibilityIgnoresInvertColors
                 accessibilityLabel="Vista previa de la factura"
                 resizeMode="cover"
-                source={require('@/assets/images/invoice-document.png')}
+                source={photoUri ? { uri: photoUri } : require('@/assets/images/invoice-document.png')}
                 style={styles.attachmentThumbnail}
               />
               <View style={styles.attachmentCopy}>
                 <Text numberOfLines={1} style={styles.attachmentName}>
-                  factura_0012345.jpg
+                  factura_{invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg
                 </Text>
-                <Text style={styles.attachmentSize}>245 KB</Text>
+                <Text style={styles.attachmentSize}>Imagen capturada</Text>
               </View>
               <SymbolView
                 name={{ ios: 'xmark', android: 'close', web: 'close' }}

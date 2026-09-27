@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { InvoiceProcessingProvider } from '@/context/invoice-processing-context';
+
 export default function RootLayout() {
   return (
-    <>
+    <InvoiceProcessingProvider>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
@@ -24,6 +26,6 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right', gestureEnabled: false }}
         />
       </Stack>
-    </>
+    </InvoiceProcessingProvider>
   );
 }

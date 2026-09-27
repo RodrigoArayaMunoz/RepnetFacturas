@@ -14,14 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const BRAND_BLUE = '#087BFF';
+import { useInvoiceProcessing } from '@/context/invoice-processing-context';
 
-const detectedProducts = [
-  { code: 'FIL-ACE-001', quantity: 2 },
-  { code: 'FIL-AIR-002', quantity: 1 },
-  { code: 'PAS-FRE-003', quantity: 1 },
-  { code: 'ACE-15W40-004', quantity: 4 },
-];
+const BRAND_BLUE = '#087BFF';
 
 type DetailFieldProps = {
   label: string;
@@ -42,6 +37,7 @@ function DetailField({ label, value }: DetailFieldProps) {
 }
 
 export default function InvoiceResultScreen() {
+  const { invoice, resetInvoice } = useInvoiceProcessing();
   const [opacity] = useState(() => new Animated.Value(0));
   const [translateY] = useState(() => new Animated.Value(16));
 
@@ -71,7 +67,10 @@ export default function InvoiceResultScreen() {
           accessibilityLabel="Volver al inicio"
           accessibilityRole="button"
           hitSlop={10}
-          onPress={() => router.dismissTo('/')}
+          onPress={() => {
+            resetInvoice();
+            router.dismissTo('/');
+          }}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
           <SymbolView
             name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
@@ -103,14 +102,14 @@ export default function InvoiceResultScreen() {
             },
           ]}>
           <View style={styles.detailsCard}>
-            <DetailField label="Proveedor" value="Comercial Andes SpA" />
+            <DetailField label="Proveedor" value={invoice?.supplierName ?? 'No detectado'} />
             <View style={styles.divider} />
-            <DetailField label="N.º de factura" value="0012345" />
+            <DetailField label="N.º de factura" value={invoice?.invoiceNumber ?? 'No detectado'} />
           </View>
 
           <View style={styles.productsSection}>
             <Text style={styles.productsTitle}>
-              Productos detectados ({detectedProducts.length})
+              Productos detectados ({invoice?.products.length ?? 0})
             </Text>
             <View style={styles.productsTable}>
               <View style={[styles.tableRow, styles.tableHeader]}>
@@ -118,21 +117,29 @@ export default function InvoiceResultScreen() {
                 <Text style={[styles.tableHeaderText, styles.quantityColumn]}>Cantidad</Text>
               </View>
 
-              {detectedProducts.map((product, index) => (
+              {invoice?.products.map((product, index) => (
                 <View
-                  key={product.code}
+                  key={`${product.productCode ?? 'sin-codigo'}-${index}`}
                   style={[
                     styles.tableRow,
-                    index < detectedProducts.length - 1 && styles.tableRowBorder,
+                    index < invoice.products.length - 1 && styles.tableRowBorder,
                   ]}>
                   <Text selectable style={[styles.tableCellText, styles.codeColumn]}>
-                    {product.code}
+                    {product.productCode ?? 'No detectado'}
                   </Text>
                   <Text style={[styles.tableCellText, styles.quantityColumn]}>
-                    {product.quantity}
+                    {product.quantity ?? '—'}
                   </Text>
                 </View>
               ))}
+
+              {!invoice?.products.length && (
+                <View style={styles.emptyProductsRow}>
+                  <Text style={styles.emptyProductsText}>
+                    No se detectaron productos en la factura.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -269,6 +276,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
+  },
+  emptyProductsRow: {
+    minHeight: 58,
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyProductsText: {
+    color: '#667085',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   codeColumn: {
     flex: 1,

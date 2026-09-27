@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useInvoiceProcessing } from '@/context/invoice-processing-context';
+
 const BRAND_BLUE = '#087BFF';
 
 type SymbolName = ComponentProps<typeof SymbolView>['name'];
@@ -50,6 +52,7 @@ function InvoiceFrame() {
 }
 
 export default function CameraScreen() {
+  const { selectPhoto } = useInvoiceProcessing();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -94,6 +97,7 @@ export default function CameraScreen() {
       return;
     }
 
+    selectPhoto(capturedUri);
     router.replace('/processing');
   };
 
