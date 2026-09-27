@@ -1,12 +1,16 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Easing,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,20 +23,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInvoiceProcessing } from '@/context/invoice-processing-context';
 
 const BRAND_BLUE = '#087BFF';
+const RECIPIENTS = ['Contacto@autthcomercial.cl', 'm.arellano@autthcomercial.cl'];
 
 export default function EmailPreviewScreen() {
   const { invoice, photoUri } = useInvoiceProcessing();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const messageSectionY = useRef(0);
+  const focusScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [opacity] = useState(() => new Animated.Value(0));
   const [translateY] = useState(() => new Animated.Value(16));
+  const [isDocumentPreviewVisible, setDocumentPreviewVisible] = useState(false);
   const supplierName = invoice?.supplierName ?? 'proveedor no detectado';
   const invoiceNumber = invoice?.invoiceNumber ?? 'sin número';
   const [message, setMessage] = useState(() =>
     [
-      'Hola,',
+      'Estimados,',
       '',
       `Adjunto factura N.º ${invoiceNumber} de ${supplierName}.`,
       '',
-      `Productos detectados: ${invoice?.products.length ?? 0}`,
+      `Ingresar como parte de entrada de mercadería en el sistema.`,
       '',
       'Quedo atento,',
     ].join('\n'),
@@ -55,8 +64,35 @@ export default function EmailPreviewScreen() {
     ]).start();
   }, [opacity, translateY]);
 
+  useEffect(
+    () => () => {
+      if (focusScrollTimer.current) {
+        clearTimeout(focusScrollTimer.current);
+      }
+    },
+    [],
+  );
+
+  const revealMessageEditor = () => {
+    if (focusScrollTimer.current) {
+      clearTimeout(focusScrollTimer.current);
+    }
+
+    focusScrollTimer.current = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        animated: true,
+        y: Math.max(messageSectionY.current - 12, 0),
+      });
+    }, 300);
+  };
+
   const sendEmail = () => {
     Alert.alert('Correo preparado', 'El envío real se habilitará al conectar el servicio de correo.');
+  };
+
+  const openDocumentPreview = () => {
+    Keyboard.dismiss();
+    setDocumentPreviewVisible(true);
   };
 
   return (
@@ -87,19 +123,25 @@ export default function EmailPreviewScreen() {
         />
       </View>
 
-      <ScrollView
-        alwaysBounceVertical={false}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity,
-              transform: [{ translateY }],
-            },
-          ]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}>
+        <ScrollView
+          ref={scrollViewRef}
+          alwaysBounceVertical={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}>
+          <Animated.View
+            style={[
+              styles.content,
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
+            ]}>
           <Text style={styles.description}>
             La factura y su información serán enviadas por correo electrónico.
           </Text>
@@ -107,13 +149,17 @@ export default function EmailPreviewScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Destinatarios</Text>
             <View style={styles.recipientsCard}>
-              <View style={styles.recipientChip}>
-                <Text style={styles.recipientText}>compras@repnet.cl</Text>
-                <SymbolView
-                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                  size={14}
-                  tintColor={BRAND_BLUE}
-                />
+              <View style={styles.recipientList}>
+                {RECIPIENTS.map((recipient) => (
+                  <View key={recipient} style={styles.recipientChip}>
+                    <Text style={styles.recipientText}>{recipient}</Text>
+                    <SymbolView
+                      name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                      size={14}
+                      tintColor={BRAND_BLUE}
+                    />
+                  </View>
+                ))}
               </View>
 
               <View style={styles.addRecipientRow}>
@@ -131,17 +177,22 @@ export default function EmailPreviewScreen() {
             <Text style={styles.label}>Asunto</Text>
             <View style={styles.singleLineField}>
               <Text style={styles.fieldText}>
-                Factura N.º {invoiceNumber} - {supplierName}
+                Recepción Mercadería Factura N.º {invoiceNumber} - {supplierName}
               </Text>
             </View>
           </View>
 
-          <View style={styles.section}>
+          <View
+            onLayout={({ nativeEvent }) => {
+              messageSectionY.current = nativeEvent.layout.y;
+            }}
+            style={styles.section}>
             <Text style={styles.label}>Mensaje</Text>
             <TextInput
               accessibilityLabel="Mensaje del correo"
               multiline
               onChangeText={setMessage}
+              onFocus={revealMessageEditor}
               placeholder="Escribe un mensaje..."
               placeholderTextColor="#9AA4B2"
               selectionColor={BRAND_BLUE}
@@ -152,27 +203,19 @@ export default function EmailPreviewScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Documento adjunto</Text>
-            <View style={styles.attachmentCard}>
-              <Image
-                accessibilityIgnoresInvertColors
-                accessibilityLabel="Vista previa de la factura"
-                resizeMode="cover"
-                source={photoUri ? { uri: photoUri } : require('@/assets/images/invoice-document.png')}
-                style={styles.attachmentThumbnail}
-              />
-              <View style={styles.attachmentCopy}>
-                <Text numberOfLines={1} style={styles.attachmentName}>
-                  factura_{invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg
-                </Text>
-                <Text style={styles.attachmentSize}>Imagen capturada</Text>
-              </View>
+            <Pressable
+              accessibilityLabel="Ver documento adjunto"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={openDocumentPreview}
+              style={({ pressed }) => [styles.documentLink, pressed && styles.pressed]}>
               <SymbolView
-                name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                size={18}
-                tintColor="#4B5563"
+                name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+                size={20}
+                tintColor={BRAND_BLUE}
               />
-            </View>
+              <Text style={styles.documentLinkText}>Ver Documento Adjunto</Text>
+            </Pressable>
           </View>
 
           <Pressable
@@ -186,8 +229,50 @@ export default function EmailPreviewScreen() {
             />
             <Text style={styles.sendButtonText}>Enviar correo</Text>
           </Pressable>
-        </Animated.View>
-      </ScrollView>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setDocumentPreviewVisible(false)}
+        statusBarTranslucent
+        transparent
+        visible={isDocumentPreviewVisible}>
+        <View style={styles.previewBackdrop}>
+          <SafeAreaView
+            accessibilityViewIsModal
+            edges={['top', 'right', 'bottom', 'left']}
+            style={styles.previewSafeArea}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Documento adjunto</Text>
+              <Pressable
+                accessibilityLabel="Cerrar vista del documento"
+                accessibilityRole="button"
+                hitSlop={10}
+                onPress={() => setDocumentPreviewVisible(false)}
+                style={({ pressed }) => [styles.previewCloseButton, pressed && styles.pressed]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={24}
+                  tintColor="#FFFFFF"
+                  weight="semibold"
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.previewImageFrame}>
+              <Image
+                accessibilityIgnoresInvertColors
+                accessibilityLabel="Fotografía del documento adjunto"
+                resizeMode="contain"
+                source={photoUri ? { uri: photoUri } : require('@/assets/images/invoice-document.png')}
+                style={styles.previewImage}
+              />
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -196,6 +281,12 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     width: '100%',
@@ -264,6 +355,10 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: '#E5F1FF',
   },
+  recipientList: {
+    alignItems: 'flex-start',
+    gap: 6,
+  },
   recipientText: {
     color: BRAND_BLUE,
     fontSize: 13,
@@ -310,38 +405,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
-  attachmentCard: {
-    minHeight: 70,
-    padding: 8,
-    paddingRight: 12,
-    borderWidth: 1,
-    borderColor: '#D9E0E8',
-    borderRadius: 10,
+  documentLink: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    gap: 8,
   },
-  attachmentThumbnail: {
-    width: 58,
-    height: 52,
-    borderRadius: 6,
-    backgroundColor: '#EDF2F7',
-  },
-  attachmentCopy: {
-    flex: 1,
-    paddingHorizontal: 11,
-  },
-  attachmentName: {
-    color: '#1F2937',
-    fontSize: 13,
+  documentLinkText: {
+    color: BRAND_BLUE,
+    fontSize: 14,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 20,
+    textDecorationLine: 'underline',
   },
-  attachmentSize: {
-    marginTop: 2,
-    color: '#7B8491',
-    fontSize: 11,
-    lineHeight: 15,
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 16, 28, 0.94)',
+  },
+  previewSafeArea: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  previewHeader: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  previewCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  previewImageFrame: {
+    flex: 1,
+    overflow: 'hidden',
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   sendButton: {
     minHeight: 54,
