@@ -1,8 +1,11 @@
+import { File } from 'expo-file-system';
+import { fetch } from 'expo/fetch';
 import { Platform } from 'react-native';
 
 import type { InvoiceData, InvoiceProduct } from '@/types/invoice';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '');
+const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export class InvoiceApiError extends Error {
   status?: number;
@@ -83,34 +86,53 @@ export async function analyzeInvoice(photoUri: string): Promise<InvoiceData> {
   }
 
   const formData = new FormData();
-  const { fileName, type } = getImageMetadata(photoUri);
+  const { fileName } = getImageMetadata(photoUri);
 
-  if (Platform.OS === 'web') {
-    const imageResponse = await fetch(photoUri);
-    const imageBlob = await imageResponse.blob();
-    formData.append('invoice', imageBlob, fileName);
-  } else {
-    formData.append(
-      'invoice',
-      {
-        name: fileName,
-        type,
-        uri: photoUri,
-      } as unknown as Blob,
-    );
+  try {
+    if (Platform.OS === 'web') {
+      const imageResponse = await fetch(photoUri);
+      if (!imageResponse.ok) throw new Error('La fotografía no está disponible.');
+      const imageBlob = await imageResponse.blob();
+      if (imageBlob.size > MAX_IMAGE_BYTES) {
+        throw new InvoiceApiError('La fotografía supera el máximo de 10 MB. Toma otra foto de menor tamaño.');
+      }
+      formData.append('invoice', imageBlob, fileName);
+    } else {
+      const file = new File(photoUri);
+      if (!file.exists || file.size === 0) {
+        throw new InvoiceApiError('La fotografía ya no está disponible. Toma otra foto para continuar.');
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        throw new InvoiceApiError('La fotografía supera el máximo de 10 MB. Toma otra foto de menor tamaño.');
+      }
+      // Expo SDK 57 fetch accepts a File/Blob, not RN's legacy { uri, name, type }.
+      formData.append('invoice', file);
+    }
+  } catch (error) {
+    if (error instanceof InvoiceApiError) throw error;
+    if (__DEV__) console.warn('[Factura: lectura]', error instanceof Error ? error.message : 'Error desconocido');
+    throw new InvoiceApiError('No pudimos leer la fotografía. Toma otra foto e inténtalo nuevamente.');
   }
 
-  let response: Response;
+  let response: Awaited<ReturnType<typeof fetch>>;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
     response = await fetch(`${apiUrl}/api/invoices/analyze`, {
       method: 'POST',
       body: formData,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
+    if (__DEV__) console.warn('[Factura: envío]', apiUrl, error instanceof Error ? error.message : 'Error desconocido');
     throw new InvoiceApiError(
-      'No pudimos conectar con el servidor. Verifica que el backend esté iniciado y que el teléfono use la misma red Wi-Fi.',
+      controller.signal.aborted
+        ? 'El servidor tardó demasiado en responder. Inténtalo nuevamente.'
+        : 'No pudimos enviar la fotografía al servidor. Comprueba la conexión e inténtalo nuevamente.',
     );
+  } finally {
+    clearTimeout(timeout);
   }
 
   let payload: unknown;
