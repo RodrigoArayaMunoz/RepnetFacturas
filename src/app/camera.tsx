@@ -16,6 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useInvoiceProcessing } from '@/context/invoice-processing-context';
+import {
+  processDocumentPhoto,
+  type LayoutRect,
+} from '@/utils/document-image';
 
 const BRAND_BLUE = '#087BFF';
 
@@ -26,6 +30,26 @@ type IconButtonProps = {
   icon: SymbolName;
   onPress: () => void;
 };
+
+type WindowMeasurement = LayoutRect;
+
+function measureInWindow(view: View | null) {
+  return new Promise<WindowMeasurement>((resolve, reject) => {
+    if (!view) {
+      reject(new Error('La cámara todavía no está lista.'));
+      return;
+    }
+
+    view.measureInWindow((x, y, width, height) => {
+      if (width <= 0 || height <= 0) {
+        reject(new Error('No fue posible medir el marco de la factura.'));
+        return;
+      }
+
+      resolve({ x, y, width, height });
+    });
+  });
+}
 
 function IconButton({ accessibilityLabel, icon, onPress }: IconButtonProps) {
   return (
@@ -54,6 +78,8 @@ function InvoiceFrame() {
 export default function CameraScreen() {
   const { selectPhoto } = useInvoiceProcessing();
   const cameraRef = useRef<CameraView>(null);
+  const cameraContainerRef = useRef<View>(null);
+  const invoiceFrameRef = useRef<View>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [flashEnabled, setFlashEnabled] = useState(false);
@@ -73,14 +99,29 @@ export default function CameraScreen() {
     setIsTakingPicture(true);
 
     try {
+      const [cameraBounds, frameBounds] = await Promise.all([
+        measureInWindow(cameraContainerRef.current),
+        measureInWindow(invoiceFrameRef.current),
+      ]);
       const picture = await cameraRef.current.takePictureAsync({
-        quality: 0.9,
+        quality: 1,
         skipProcessing: false,
       });
 
-      setCapturedUri(picture.uri);
+      const processedUri = await processDocumentPhoto(
+        picture,
+        { width: cameraBounds.width, height: cameraBounds.height },
+        {
+          x: frameBounds.x - cameraBounds.x,
+          y: frameBounds.y - cameraBounds.y,
+          width: frameBounds.width,
+          height: frameBounds.height,
+        },
+      );
+
+      setCapturedUri(processedUri);
     } catch {
-      setCameraError('No pudimos tomar la foto. Inténtalo nuevamente.');
+      setCameraError('No pudimos preparar el escaneo. Inténtalo nuevamente.');
     } finally {
       setIsTakingPicture(false);
     }
@@ -158,7 +199,7 @@ export default function CameraScreen() {
   const isPreviewing = capturedUri !== null;
 
   return (
-    <View style={styles.screen}>
+    <View collapsable={false} ref={cameraContainerRef} style={styles.screen}>
       <StatusBar style="light" />
 
       {isPreviewing ? (
@@ -198,11 +239,15 @@ export default function CameraScreen() {
 
         <View style={styles.instructionBadge}>
           <Text style={styles.instructionText}>
-            {isPreviewing ? 'Revisa que la factura se vea completa' : 'Ubica la factura dentro del marco'}
+            {isTakingPicture
+              ? 'Preparando escaneo…'
+              : isPreviewing
+                ? 'Revisa el recorte y la legibilidad'
+                : 'Ubica la factura dentro del marco'}
           </Text>
         </View>
 
-        <View style={styles.frameArea}>
+        <View collapsable={false} ref={invoiceFrameRef} style={styles.frameArea}>
           <InvoiceFrame />
         </View>
 
