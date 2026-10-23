@@ -29,8 +29,11 @@ export function InvoiceProcessingProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<InvoiceProcessingStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const inFlightRequest = useRef<Promise<InvoiceData> | null>(null);
+  const selectionVersion = useRef(0);
 
   const selectPhoto = useCallback((uri: string) => {
+    selectionVersion.current += 1;
+    inFlightRequest.current = null;
     setPhotoUri(uri);
     setInvoice(null);
     setErrorMessage(null);
@@ -38,6 +41,7 @@ export function InvoiceProcessingProvider({ children }: PropsWithChildren) {
   }, []);
 
   const resetInvoice = useCallback(() => {
+    selectionVersion.current += 1;
     inFlightRequest.current = null;
     setPhotoUri(null);
     setInvoice(null);
@@ -45,12 +49,12 @@ export function InvoiceProcessingProvider({ children }: PropsWithChildren) {
     setStatus('idle');
   }, []);
 
-  const processInvoice = useCallback(async () => {
+  const processInvoice = useCallback(() => {
     if (!photoUri) {
       const error = new InvoiceApiError('No hay una fotografía seleccionada para procesar.');
       setErrorMessage(error.message);
       setStatus('error');
-      throw error;
+      return Promise.reject(error);
     }
 
     if (inFlightRequest.current) {
@@ -60,34 +64,44 @@ export function InvoiceProcessingProvider({ children }: PropsWithChildren) {
     setErrorMessage(null);
     setStatus('processing');
 
-    const request = analyzeInvoice(photoUri);
-    inFlightRequest.current = request;
+    const version = selectionVersion.current;
+    const request = (async () => {
+      try {
+        const extractedInvoice = await analyzeInvoice(photoUri);
 
-    try {
-      const extractedInvoice = await request;
+        if (selectionVersion.current !== version) {
+          throw new InvoiceApiError('La fotografía seleccionada cambió. Vuelve a procesarla.');
+        }
 
-      if (!extractedInvoice.documentReadable) {
-        throw new InvoiceApiError(
-          'No pudimos identificar una factura legible. Toma otra foto con buena luz y el documento completo.',
-        );
+        if (!extractedInvoice.documentReadable) {
+          throw new InvoiceApiError(
+            'No pudimos identificar una factura legible. Toma otra foto con buena luz y el documento completo.',
+          );
+        }
+
+        setInvoice(extractedInvoice);
+        setStatus('success');
+        return extractedInvoice;
+      } catch (error) {
+        if (selectionVersion.current === version) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Ocurrió un error inesperado al procesar la factura.';
+
+          setInvoice(null);
+          setErrorMessage(message);
+          setStatus('error');
+        }
+        throw error;
+      } finally {
+        if (selectionVersion.current === version) {
+          inFlightRequest.current = null;
+        }
       }
-
-      setInvoice(extractedInvoice);
-      setStatus('success');
-      return extractedInvoice;
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Ocurrió un error inesperado al procesar la factura.';
-
-      setInvoice(null);
-      setErrorMessage(message);
-      setStatus('error');
-      throw error;
-    } finally {
-      inFlightRequest.current = null;
-    }
+    })();
+    inFlightRequest.current = request;
+    return request;
   }, [photoUri]);
 
   const value = useMemo(

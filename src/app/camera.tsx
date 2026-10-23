@@ -66,7 +66,7 @@ function IconButton({ accessibilityLabel, icon, onPress }: IconButtonProps) {
 
 function InvoiceFrame() {
   return (
-    <View pointerEvents="none" style={styles.invoiceFrame}>
+    <View style={styles.invoiceFrame}>
       <View style={[styles.corner, styles.topLeftCorner]} />
       <View style={[styles.corner, styles.topRightCorner]} />
       <View style={[styles.corner, styles.bottomLeftCorner]} />
@@ -370,6 +370,7 @@ const styles = StyleSheet.create({
   },
   invoiceFrame: {
     flex: 1,
+    pointerEvents: 'none',
   },
   corner: {
     position: 'absolute',

@@ -4,17 +4,17 @@
   "version": "1.0.0",
   "dependencies": {
     "@shopify/react-native-skia": "2.6.2",
-    "expo": "~57.0.25",
+    "expo": "~57.0.31",
     "expo-build-properties": "~57.0.22",
-    "expo-camera": "~57.0.5",
+    "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.19",
-    "expo-dev-client": "~57.0.19",
+    "expo-dev-client": "~57.0.20",
     "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
-    "expo-image-manipulator": "~57.0.20",
-    "expo-linking": "~57.0.11",
-    "expo-router": "~57.0.23",
-    "expo-splash-screen": "~57.0.9",
+    "expo-image-manipulator": "~57.0.21",
+    "expo-linking": "~57.0.13",
+    "expo-router": "~57.0.29",
+    "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
@@ -36,7 +36,14 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/apply-dependency-security-patches.cjs",
+    "test:security": "node scripts/apply-dependency-security-patches.cjs --check && node --test scripts/dependency-security.test.cjs"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "@shopify/react-native-skia@2.6.2": true,
+    "unrs-resolver@1.12.2": true
+  }
 }

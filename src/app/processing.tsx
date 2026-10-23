@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -181,13 +182,13 @@ export default function ProcessingScreen() {
         duration: 420,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(entranceTranslateY, {
         duration: 420,
         easing: Easing.out(Easing.cubic),
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
 
@@ -233,7 +234,7 @@ export default function ProcessingScreen() {
           mass: 0.7,
           stiffness: 130,
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }).start();
       } catch {
         // El contexto conserva el mensaje que se muestra debajo del progreso.
