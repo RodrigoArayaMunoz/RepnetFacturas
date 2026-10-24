@@ -44,3 +44,8 @@ example
 
 # Backend secrets
 server/.env
+
+# Supabase local state and secrets
+/supabase/.temp/
+/supabase/.branches/
+/supabase/.env

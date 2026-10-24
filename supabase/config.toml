@@ -1,0 +1,7 @@
+[auth]
+enable_anonymous_sign_ins = true
+
+[functions.enviar-factura]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/enviar-factura/index.ts"

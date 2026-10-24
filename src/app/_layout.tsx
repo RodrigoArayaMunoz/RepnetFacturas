@@ -1,9 +1,13 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
 import { InvoiceProcessingProvider } from '@/context/invoice-processing-context';
+import { manageMailSessionRefresh } from '@/services/supabase-client';
 
 export default function RootLayout() {
+  useEffect(manageMailSessionRefresh, []);
+
   return (
     <InvoiceProcessingProvider>
       <StatusBar style="dark" />

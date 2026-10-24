@@ -1,0 +1,12 @@
+{
+  "name": "repnetfacturas-mail-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test functions/enviar-factura/handler.test.mjs tests/database.test.mjs"
+  },
+  "devDependencies": {
+    "nodemailer": "10.2.1",
+    "@electric-sql/pglite": "0.5.11"
+  }
+}

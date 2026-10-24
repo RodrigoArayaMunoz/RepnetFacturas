@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@shopify/react-native-skia": "2.6.2",
+    "@supabase/supabase-js": "^2.118.0",
     "expo": "~57.0.31",
     "expo-build-properties": "~57.0.22",
     "expo-camera": "~57.0.6",
@@ -14,6 +15,7 @@
     "expo-image-manipulator": "~57.0.21",
     "expo-linking": "~57.0.13",
     "expo-router": "~57.0.29",
+    "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
@@ -39,7 +41,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/apply-dependency-security-patches.cjs",
-    "test:security": "node scripts/apply-dependency-security-patches.cjs --check && node --test scripts/dependency-security.test.cjs"
+    "test:security": "node scripts/apply-dependency-security-patches.cjs --check && node --test scripts/dependency-security.test.cjs",
+    "test:mail": "node --test scripts/session-storage.test.cjs scripts/invoice-mail.test.cjs && npm --prefix supabase test"
   },
   "private": true,
   "allowScripts": {

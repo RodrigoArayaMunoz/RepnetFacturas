@@ -66,8 +66,11 @@ También se revisaron los scripts de instalación de
 - `/health` del servidor configurado respondió HTTP 200. Auditoría del servidor:
   0 vulnerabilidades. No se enviaron facturas al modelo ni correos reales.
 
-El envío de correo real sigue pendiente de implementar en `email-preview.tsx`;
-la validación de la vista previa no comprueba un servicio de envío.
+El botón de `email-preview.tsx` ya usa el servicio de correo de Supabase y adjunta
+la fotografía. La integración incluye autorización de dispositivos, registro e
+idempotencia. Las pruebas generan mensajes MIME en memoria, sin conectarse a
+SMTP. La activación remota de esta integración está pendiente de autorización;
+estas comprobaciones no envían correos a los destinatarios de la aplicación.
 
 No utilizar `npm audit fix --force` para resolver estos avisos: la propuesta de
 npm mezcla una bajada a Expo 44 con un cambio de Router a SDK 58. Cuando los
