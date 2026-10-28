@@ -25,6 +25,31 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Error de inicio: `Cannot find native module 'ExpoSecureStore'`
+
+El APK instalado se compiló antes de añadir `expo-secure-store`. Los avisos de
+rutas sin `default export` y el error de `ErrorBoundary` pueden ser consecuencia
+de ese mismo fallo al importar las pantallas.
+
+La app carga ahora el almacenamiento seguro al solicitar la sesión para enviar
+un correo, de modo que su ausencia no impide abrir las pantallas. Para habilitar
+el envío seguro en Android, genera e instala una nueva compilación de desarrollo:
+
+```bash
+npx eas-cli@latest build --platform android --profile development
+```
+
+Después de instalar el APK resultante, inicia Metro y conecta la app:
+
+```bash
+npx expo start --dev-client --clear
+```
+
+Recargar JavaScript o limpiar la caché no añade módulos nativos al APK. No hace
+falta crear ni editar `android/` o `ios/` manualmente. Consulta la
+[documentación de Expo sobre recompilar el cliente](https://docs.expo.dev/develop/development-builds/use-development-builds/#rebuild-a-development-build)
+y la [configuración del correo](docs/EMAIL_SETUP.md).
+
 ## Get a fresh project
 
 When you're ready, run:

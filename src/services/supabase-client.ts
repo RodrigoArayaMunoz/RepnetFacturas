@@ -1,5 +1,5 @@
 import { createClient, processLock, type Session, type SupabaseClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
+import { requireOptionalNativeModule } from 'expo';
 import { AppState, Platform } from 'react-native';
 
 import { createChunkedSessionStorage } from '@/utils/session-storage';
@@ -27,18 +27,37 @@ export function getMailSupabaseConfig() {
   return { url, key };
 }
 
-function getClient() {
+async function createNativeSessionStorage() {
+  let SecureStore: typeof import('expo-secure-store');
+  try {
+    // Older development builds may not include the native module yet.
+    // Load it only when sending mail so it cannot prevent routes from loading.
+    if (!requireOptionalNativeModule('ExpoSecureStore')) {
+      throw new Error('ExpoSecureStore is missing from the installed build');
+    }
+    SecureStore = await import('expo-secure-store');
+    if (!await SecureStore.isAvailableAsync()) {
+      throw new Error('SecureStore is unavailable');
+    }
+  } catch {
+    throw new MailSessionError(
+      'Actualiza la aplicación instalada para habilitar el envío seguro de correos.',
+      'SECURE_STORAGE_UNAVAILABLE',
+    );
+  }
+  return createChunkedSessionStorage({
+    getItem: (name) => SecureStore.getItemAsync(name),
+    setItem: (name, value) => SecureStore.setItemAsync(name, value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    }),
+    removeItem: (name) => SecureStore.deleteItemAsync(name),
+  });
+}
+
+async function getClient() {
   if (client) return client;
   const { url, key } = getMailSupabaseConfig();
-  const storage = Platform.OS === 'web'
-    ? undefined
-    : createChunkedSessionStorage({
-        getItem: (name) => SecureStore.getItemAsync(name),
-        setItem: (name, value) => SecureStore.setItemAsync(name, value, {
-          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-        }),
-        removeItem: (name) => SecureStore.deleteItemAsync(name),
-      });
+  const storage = Platform.OS === 'web' ? undefined : await createNativeSessionStorage();
 
   client = createClient(url, key, {
     auth: {
@@ -59,7 +78,7 @@ function getClient() {
 export async function getMailSession(): Promise<Session> {
   if (pendingSession) return pendingSession;
   pendingSession = (async () => {
-    const supabase = getClient();
+    const supabase = await getClient();
     const { data: current, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) {
       throw new MailSessionError(
