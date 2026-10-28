@@ -1,46 +1,61 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { INVOICE_EMAIL_RECIPIENTS } from '@/config/invoice-email';
 import { useInvoiceProcessing } from '@/context/invoice-processing-context';
 
 const BRAND_BLUE = '#087BFF';
 
-type DetailFieldProps = {
-  label: string;
-  value: string;
-};
-
-function DetailField({ label, value }: DetailFieldProps) {
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.fieldValueContainer}>
-        <Text selectable style={styles.fieldValue}>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 export default function InvoiceResultScreen() {
-  const { invoice, resetInvoice } = useInvoiceProcessing();
+  const {
+    emailDelivery,
+    emailDraft,
+    invoice,
+    photoUri,
+    resetInvoice,
+    submitInvoiceEmail,
+    updateEmailDraft,
+  } = useInvoiceProcessing();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const messageSectionY = useRef(0);
+  const focusScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [opacity] = useState(() => new Animated.Value(0));
   const [translateY] = useState(() => new Animated.Value(16));
+  const [isDocumentPreviewVisible, setDocumentPreviewVisible] = useState(false);
+  const isSending = emailDelivery.status === 'sending';
+  const isSent = emailDelivery.status === 'sent';
+  const needsReview = emailDelivery.status === 'uncertain';
+  const isDraftLocked = isSending || isSent || needsReview;
+  const isSendDisabled = isDraftLocked || !photoUri || !emailDraft.subject.trim() || !emailDraft.message.trim();
+  const needsDeviceApproval = emailDelivery.error?.code === 'DEVICE_NOT_APPROVED';
+  const buttonLabel = isSending
+    ? 'Enviando…'
+    : isSent
+      ? 'Enviado'
+      : needsReview
+        ? 'Revisar envío'
+        : emailDelivery.status === 'error'
+          ? 'Volver a intentar'
+          : 'Enviar factura';
 
   useEffect(() => {
     Animated.parallel([
@@ -59,6 +74,50 @@ export default function InvoiceResultScreen() {
     ]).start();
   }, [opacity, translateY]);
 
+  useEffect(
+    () => () => {
+      if (focusScrollTimer.current) {
+        clearTimeout(focusScrollTimer.current);
+      }
+    },
+    [],
+  );
+
+  const revealMessageEditor = () => {
+    if (focusScrollTimer.current) {
+      clearTimeout(focusScrollTimer.current);
+    }
+
+    focusScrollTimer.current = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        animated: true,
+        y: Math.max(messageSectionY.current - 12, 0),
+      });
+    }, 300);
+  };
+
+  const sendEmail = () => {
+    Keyboard.dismiss();
+    void submitInvoiceEmail();
+  };
+
+  const openDocumentPreview = () => {
+    Keyboard.dismiss();
+    setDocumentPreviewVisible(true);
+  };
+
+  const returnToStart = () => {
+    Keyboard.dismiss();
+    resetInvoice();
+    router.dismissTo('/');
+  };
+
+  const captureAnotherInvoice = () => {
+    Keyboard.dismiss();
+    resetInvoice();
+    router.replace('/camera');
+  };
+
   return (
     <SafeAreaView edges={['top', 'right', 'bottom', 'left']} style={styles.screen}>
       <StatusBar style="dark" />
@@ -67,11 +126,10 @@ export default function InvoiceResultScreen() {
         <Pressable
           accessibilityLabel="Volver al inicio"
           accessibilityRole="button"
+          accessibilityState={{ disabled: isSending }}
+          disabled={isSending}
           hitSlop={10}
-          onPress={() => {
-            resetInvoice();
-            router.dismissTo('/');
-          }}
+          onPress={returnToStart}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
           <SymbolView
             name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
@@ -90,68 +148,262 @@ export default function InvoiceResultScreen() {
         />
       </View>
 
-      <ScrollView
-        alwaysBounceVertical={false}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity,
-              transform: [{ translateY }],
-            },
-          ]}>
-          <View style={styles.detailsCard}>
-            <DetailField label="Proveedor" value={invoice?.supplierName ?? 'No detectado'} />
-            <View style={styles.divider} />
-            <DetailField label="N.º de factura" value={invoice?.invoiceNumber ?? 'No detectado'} />
-          </View>
-
-          <View style={styles.productsSection}>
-            <Text style={styles.productsTitle}>
-              Productos detectados ({invoice?.products.length ?? 0})
-            </Text>
-            <View style={styles.productsTable}>
-              <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.tableHeaderText, styles.codeColumn]}>Código de producto</Text>
-                <Text style={[styles.tableHeaderText, styles.quantityColumn]}>Cantidad</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}>
+        <ScrollView
+          ref={scrollViewRef}
+          alwaysBounceVertical={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}>
+          <Animated.View
+            style={[
+              styles.content,
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
+            ]}>
+            <View style={styles.detailsCard}>
+              <View style={styles.detailField}>
+                <Text style={styles.detailLabel}>Proveedor</Text>
+                <Text selectable style={styles.detailValue}>
+                  {invoice?.supplierName ?? 'No detectado'}
+                </Text>
               </View>
-
-              {invoice?.products.map((product, index) => (
-                <View
-                  key={`${product.productCode ?? 'sin-codigo'}-${index}`}
-                  style={[
-                    styles.tableRow,
-                    index < invoice.products.length - 1 && styles.tableRowBorder,
-                  ]}>
-                  <Text selectable style={[styles.tableCellText, styles.codeColumn]}>
-                    {product.productCode ?? 'No detectado'}
-                  </Text>
-                  <Text style={[styles.tableCellText, styles.quantityColumn]}>
-                    {product.quantity ?? '—'}
-                  </Text>
-                </View>
-              ))}
-
-              {!invoice?.products.length && (
-                <View style={styles.emptyProductsRow}>
-                  <Text style={styles.emptyProductsText}>
-                    No se detectaron productos en la factura.
-                  </Text>
-                </View>
-              )}
+              <View style={styles.divider} />
+              <View style={styles.detailField}>
+                <Text style={styles.detailLabel}>N.º de factura</Text>
+                <Text selectable style={styles.detailValue}>
+                  {invoice?.invoiceNumber ?? 'No detectado'}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/email-preview')}
-            style={({ pressed }) => [styles.finishButton, pressed && styles.pressed]}>
-            <Text style={styles.finishButtonText}>Finalizar</Text>
-          </Pressable>
-        </Animated.View>
-      </ScrollView>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Enviar por correo</Text>
+            <Text style={styles.description}>
+              Se enviará la fotografía de la factura adjunta al correo.
+            </Text>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>Destinatarios</Text>
+              <View style={styles.recipientsCard}>
+                <View style={styles.recipientList}>
+                  {INVOICE_EMAIL_RECIPIENTS.map((recipient) => (
+                    <View key={recipient} style={styles.recipientChip}>
+                      <Text style={styles.recipientText}>{recipient}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>Asunto</Text>
+              <TextInput
+                accessibilityLabel="Asunto del correo"
+                editable={!isDraftLocked}
+                maxLength={300}
+                multiline
+                onChangeText={(subject) => updateEmailDraft({ subject: subject.replace(/[\r\n]+/g, ' ') })}
+                placeholder="Escribe un asunto..."
+                placeholderTextColor="#9AA4B2"
+                selectionColor={BRAND_BLUE}
+                style={styles.subjectField}
+                textAlignVertical="top"
+                value={emailDraft.subject}
+              />
+            </View>
+
+            <View
+              onLayout={({ nativeEvent }) => {
+                messageSectionY.current = nativeEvent.layout.y;
+              }}
+              style={styles.section}>
+              <Text style={styles.label}>Mensaje</Text>
+              <TextInput
+                accessibilityLabel="Mensaje del correo"
+                editable={!isDraftLocked}
+                maxLength={10000}
+                multiline
+                onChangeText={(message) => updateEmailDraft({ message })}
+                onFocus={revealMessageEditor}
+                placeholder="Escribe un mensaje..."
+                placeholderTextColor="#9AA4B2"
+                selectionColor={BRAND_BLUE}
+                style={styles.messageField}
+                textAlignVertical="top"
+                value={emailDraft.message}
+              />
+            </View>
+
+            <View style={styles.section}>
+              <Pressable
+                accessibilityLabel="Ver fotografía adjunta"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !photoUri }}
+                disabled={!photoUri}
+                hitSlop={8}
+                onPress={openDocumentPreview}
+                style={({ pressed }) => [styles.documentLink, pressed && styles.pressed]}>
+                <SymbolView
+                  name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+                  size={20}
+                  tintColor={BRAND_BLUE}
+                />
+                <Text style={styles.documentLinkText}>Ver fotografía adjunta</Text>
+              </Pressable>
+            </View>
+
+            {emailDelivery.status !== 'idle' && (
+              <View
+                accessibilityLiveRegion="polite"
+                style={[
+                  styles.deliveryCard,
+                  isSent && styles.deliverySuccess,
+                  (emailDelivery.status === 'error' || needsReview) && styles.deliveryWarning,
+                ]}>
+                {isSending && (
+                  <Text style={styles.deliveryText}>Enviando la fotografía. Espera la confirmación.</Text>
+                )}
+                {isSent && (
+                  <>
+                    <Text accessibilityRole="header" style={styles.deliveryTitle}>
+                      Factura enviada
+                    </Text>
+                    <Text style={styles.deliveryText}>
+                      Gmail aceptó el correo para {emailDelivery.receipt?.recipients.join(', ')}.
+                    </Text>
+                  </>
+                )}
+                {needsReview && (
+                  <>
+                    <Text accessibilityRole="header" style={styles.deliveryTitle}>
+                      Revisa el envío antes de repetirlo
+                    </Text>
+                    <Text style={styles.deliveryText}>
+                      No se pudo confirmar el resultado. Revisa la carpeta Enviados de la cuenta de
+                      bodega y contacta al administrador para confirmar si salió. El reenvío está
+                      pausado para evitar duplicados.
+                    </Text>
+                  </>
+                )}
+                {emailDelivery.status === 'error' && (
+                  <>
+                    <Text accessibilityRole="header" style={styles.deliveryTitle}>
+                      {needsDeviceApproval ? 'Autoriza este dispositivo' : 'No se pudo enviar'}
+                    </Text>
+                    {needsDeviceApproval ? (
+                      <>
+                        <Text style={styles.deliveryText}>
+                          Comparte este identificador con el administrador para que autorice este
+                          dispositivo en Supabase. Después pulsa «Volver a intentar».
+                        </Text>
+                        {emailDelivery.error?.deviceId && (
+                          <Text selectable style={styles.deviceId}>
+                            {emailDelivery.error.deviceId}
+                          </Text>
+                        )}
+                      </>
+                    ) : (
+                      <Text style={styles.deliveryText}>{emailDelivery.error?.message}</Text>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+
+            {!photoUri && (
+              <Text accessibilityLiveRegion="polite" style={styles.missingPhotoText}>
+                Vuelve a la cámara y toma una fotografía antes de enviar.
+              </Text>
+            )}
+
+            <Pressable
+              accessibilityLabel={buttonLabel}
+              accessibilityRole="button"
+              accessibilityState={{ busy: isSending, disabled: isSendDisabled }}
+              disabled={isSendDisabled}
+              onPress={sendEmail}
+              style={({ pressed }) => [
+                styles.sendButton,
+                isSent && styles.sentButton,
+                isSendDisabled && !isSent && styles.disabledButton,
+                pressed && styles.pressed,
+              ]}>
+              {isSending ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <SymbolView
+                  name={isSent
+                    ? { ios: 'checkmark', android: 'check', web: 'check' }
+                    : { ios: 'paperplane.fill', android: 'send', web: 'send' }}
+                  size={22}
+                  tintColor="#FFFFFF"
+                />
+              )}
+              <Text style={styles.sendButtonText}>{buttonLabel}</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isSending }}
+              disabled={isSending}
+              onPress={captureAnotherInvoice}
+              style={({ pressed }) => [
+                styles.newInvoiceButton,
+                isSending && styles.disabledButton,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.newInvoiceButtonText}>Capturar otra factura</Text>
+            </Pressable>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setDocumentPreviewVisible(false)}
+        statusBarTranslucent
+        transparent
+        visible={isDocumentPreviewVisible}>
+        <View style={styles.previewBackdrop}>
+          <SafeAreaView
+            accessibilityViewIsModal
+            edges={['top', 'right', 'bottom', 'left']}
+            style={styles.previewSafeArea}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Fotografía adjunta</Text>
+              <Pressable
+                accessibilityLabel="Cerrar vista del documento"
+                accessibilityRole="button"
+                hitSlop={10}
+                onPress={() => setDocumentPreviewVisible(false)}
+                style={({ pressed }) => [styles.previewCloseButton, pressed && styles.pressed]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={24}
+                  tintColor="#FFFFFF"
+                  weight="semibold"
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.previewImageFrame}>
+              <Image
+                accessibilityIgnoresInvertColors
+                accessibilityLabel="Fotografía del documento adjunto"
+                resizeMode="contain"
+                source={photoUri ? { uri: photoUri } : require('@/assets/images/invoice-document.png')}
+                style={styles.previewImage}
+              />
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -160,6 +412,12 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     width: '100%',
@@ -189,130 +447,253 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 440,
-    paddingHorizontal: 18,
+    maxWidth: 520,
+    paddingHorizontal: 20,
     paddingTop: 4,
     paddingBottom: 24,
   },
   detailsCard: {
-    paddingHorizontal: 12,
-    paddingVertical: 3,
+    marginBottom: 22,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#E3E8EF',
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    boxShadow: '0 7px 18px rgba(75, 120, 168, 0.10)',
-    elevation: 3,
+    borderColor: '#DDE5EF',
+    borderRadius: 14,
+    backgroundColor: '#F7FAFE',
   },
-  fieldGroup: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
+  detailField: {
+    paddingVertical: 13,
+    gap: 5,
   },
-  fieldLabel: {
-    width: 100,
-    paddingRight: 10,
-    color: '#667085',
-    fontSize: 12,
+  detailLabel: {
+    color: '#687386',
+    fontSize: 13,
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: 18,
   },
-  fieldValueContainer: {
-    minHeight: 36,
-    flex: 1,
-    paddingHorizontal: 11,
-    borderRadius: 8,
-    justifyContent: 'center',
-    backgroundColor: '#F4F7FA',
-  },
-  fieldValue: {
+  detailValue: {
     color: '#182230',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
-    lineHeight: 19,
+    lineHeight: 22,
   },
   divider: {
     height: 1,
-    backgroundColor: '#EDF0F4',
+    backgroundColor: '#E1E8F0',
   },
-  productsSection: {
-    marginTop: 16,
-  },
-  productsTitle: {
-    marginBottom: 9,
+  sectionTitle: {
+    marginBottom: 5,
     color: '#182230',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
-    lineHeight: 21,
+    lineHeight: 25,
   },
-  productsTable: {
-    overflow: 'hidden',
+  description: {
+    maxWidth: 360,
+    marginBottom: 15,
+    color: '#687386',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  section: {
+    marginBottom: 16,
+  },
+  label: {
+    marginBottom: 6,
+    color: '#1B2533',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  recipientsCard: {
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#DDE4EC',
+    borderColor: '#D9E0E8',
     borderRadius: 11,
     backgroundColor: '#FFFFFF',
   },
-  tableRow: {
-    minHeight: 44,
-    paddingHorizontal: 13,
+  recipientChip: {
+    minHeight: 32,
+    maxWidth: '100%',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E5F1FF',
   },
-  tableHeader: {
-    minHeight: 42,
-    backgroundColor: '#F1F5F9',
+  recipientList: {
+    alignItems: 'flex-start',
+    gap: 6,
   },
-  tableRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5EAF0',
-  },
-  tableHeaderText: {
-    color: '#344054',
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-  tableCellText: {
-    color: '#263241',
+  recipientText: {
+    flexShrink: 1,
+    color: BRAND_BLUE,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 18,
   },
-  emptyProductsRow: {
-    minHeight: 58,
-    paddingHorizontal: 13,
+  subjectField: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#D9E0E8',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    color: '#273344',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  messageField: {
+    minHeight: 156,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#D9E0E8',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    color: '#273344',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  documentLink: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  documentLinkText: {
+    color: BRAND_BLUE,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textDecorationLine: 'underline',
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 16, 28, 0.94)',
+  },
+  previewSafeArea: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  previewHeader: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  previewCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
   },
-  emptyProductsText: {
-    color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  codeColumn: {
+  previewImageFrame: {
     flex: 1,
-    paddingRight: 12,
+    overflow: 'hidden',
+    borderRadius: 16,
+    backgroundColor: 'transparent',
   },
-  quantityColumn: {
-    width: 72,
-    textAlign: 'center',
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
-  finishButton: {
+  deliveryCard: {
+    marginBottom: 14,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: '#CFDFF3',
+    borderRadius: 11,
+    backgroundColor: '#F1F7FF',
+    gap: 6,
+  },
+  deliverySuccess: {
+    borderColor: '#B9DEC9',
+    backgroundColor: '#EFF9F3',
+  },
+  deliveryWarning: {
+    borderColor: '#E6D4B2',
+    backgroundColor: '#FFF9ED',
+  },
+  deliveryTitle: {
+    color: '#1B2533',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  deliveryText: {
+    color: '#3F4D5F',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  deviceId: {
+    marginTop: 3,
+    padding: 10,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
+    color: '#1B2533',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  missingPhotoText: {
+    marginBottom: 12,
+    color: '#845C20',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sendButton: {
     minHeight: 54,
-    marginTop: 24,
+    marginTop: 2,
     paddingHorizontal: 24,
     borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
     backgroundColor: BRAND_BLUE,
     boxShadow: '0 5px 10px rgba(8, 123, 255, 0.2)',
     elevation: 4,
   },
-  finishButtonText: {
+  sentButton: {
+    backgroundColor: '#21834D',
+    boxShadow: '0 5px 10px rgba(33, 131, 77, 0.16)',
+  },
+  disabledButton: {
+    opacity: 0.6,
+    elevation: 0,
+  },
+  sendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
+  },
+  newInvoiceButton: {
+    minHeight: 48,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newInvoiceButtonText: {
+    color: BRAND_BLUE,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.75,

@@ -2,6 +2,8 @@
 
 El botón **Enviar factura** envía el asunto, el texto y la fotografía seleccionada a la Edge Function `enviar-factura`. La función valida la sesión y la autorización del dispositivo, registra el intento y utiliza Gmail SMTP para enviar el correo.
 
+Después de procesar la foto, la pantalla `invoice-result` reúne el nombre del proveedor, el número de factura y todo el formulario de correo: destinatarios, asunto y mensaje editables, vista de la foto adjunta y estado del envío. La ruta anterior `email-preview` redirige a esta pantalla. El análisis ya no solicita productos, cantidades ni otros detalles; el cambio del extractor se aplica al desplegar nuevamente el backend de `server/`.
+
 La foto viaja directamente como formulario `multipart/form-data`. Este flujo no genera PDF ni utiliza Supabase Storage. El bucket `correo-prueba` de la prueba inicial no es necesario para la aplicación.
 
 | Configuración | Valor |

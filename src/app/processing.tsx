@@ -37,19 +37,19 @@ const processingSteps: ProcessingStep[] = [
     completedDescription: 'Documento detectado',
   },
   {
-    title: 'Extrayendo información',
-    processingDescription: 'Leyendo datos de la factura...',
-    completedDescription: 'Información extraída',
+    title: 'Leyendo proveedor',
+    processingDescription: 'Buscando el nombre del proveedor...',
+    completedDescription: 'Lectura del proveedor completada',
   },
   {
-    title: 'Identificando productos',
-    processingDescription: 'Reconociendo ítems y cantidades...',
-    completedDescription: 'Productos identificados',
+    title: 'Leyendo número de factura',
+    processingDescription: 'Buscando el número de la factura...',
+    completedDescription: 'Lectura del número completada',
   },
   {
-    title: 'Validando datos',
-    processingDescription: 'Revisando el resultado...',
-    completedDescription: 'Datos validados',
+    title: 'Preparando correo',
+    processingDescription: 'Preparando el asunto y el mensaje...',
+    completedDescription: 'Correo listo para revisar',
   },
 ];
 
@@ -312,10 +312,10 @@ export default function ProcessingScreen() {
             </Text>
             <Text style={styles.description}>
               {isComplete
-                ? 'La información de tu factura fue verificada correctamente.'
+                ? 'Revisa el proveedor y el número de factura antes de enviar el correo.'
                 : errorMessage && !isProcessing
                   ? errorMessage
-                  : 'Estamos extrayendo la información del documento. Esto puede tomar unos segundos.'}
+                  : 'Estamos leyendo solo el nombre del proveedor y el número de factura. Esto puede tomar unos segundos.'}
             </Text>
           </View>
 

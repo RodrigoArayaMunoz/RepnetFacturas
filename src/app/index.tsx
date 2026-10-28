@@ -93,7 +93,7 @@ export default function HomeScreen() {
                 <Text style={styles.headingAccent}>segundos</Text>
               </Text>
               <Text style={styles.description}>
-                Extraemos automáticamente{`\n`}la información y te la enviamos{`\n`}por correo.
+                Leemos el proveedor y el número{`\n`}de factura para que envíes la foto{`\n`}por correo.
               </Text>
             </View>
 

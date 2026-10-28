@@ -2,7 +2,7 @@ import { File } from 'expo-file-system';
 import { fetch } from 'expo/fetch';
 import { Platform } from 'react-native';
 
-import type { InvoiceData, InvoiceProduct } from '@/types/invoice';
+import type { InvoiceData } from '@/types/invoice';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -38,19 +38,6 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-function isInvoiceProduct(value: unknown): value is InvoiceProduct {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const product = value as Record<string, unknown>;
-
-  return (
-    isNullableString(product.productCode) &&
-    (product.quantity === null || typeof product.quantity === 'number')
-  );
-}
-
 function isInvoiceData(value: unknown): value is InvoiceData {
   if (!value || typeof value !== 'object') {
     return false;
@@ -62,8 +49,6 @@ function isInvoiceData(value: unknown): value is InvoiceData {
     typeof invoice.documentReadable === 'boolean' &&
     isNullableString(invoice.supplierName) &&
     isNullableString(invoice.invoiceNumber) &&
-    Array.isArray(invoice.products) &&
-    invoice.products.every(isInvoiceProduct) &&
     Array.isArray(invoice.warnings) &&
     invoice.warnings.every((warning) => typeof warning === 'string')
   );
@@ -157,5 +142,10 @@ export async function analyzeInvoice(photoUri: string): Promise<InvoiceData> {
     throw new InvoiceApiError('Los datos recibidos de la factura no son válidos.');
   }
 
-  return payload;
+  return {
+    documentReadable: payload.documentReadable,
+    supplierName: payload.supplierName,
+    invoiceNumber: payload.invoiceNumber,
+    warnings: payload.warnings,
+  };
 }

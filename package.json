@@ -42,6 +42,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/apply-dependency-security-patches.cjs",
     "test:security": "node scripts/apply-dependency-security-patches.cjs --check && node --test scripts/dependency-security.test.cjs",
+    "test:invoice": "node --test scripts/invoice-api.test.cjs",
     "test:mail": "node --test scripts/session-storage.test.cjs scripts/supabase-client.test.cjs scripts/invoice-mail.test.cjs && npm --prefix supabase test"
   },
   "private": true,
